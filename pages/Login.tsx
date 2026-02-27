@@ -16,6 +16,22 @@ const BUSINESS_TYPES = [
     { id: 'art', label: 'Art', icon: '🎨' }
 ];
 
+const MinimalInput = ({ label, type = "text", value, onChange, placeholder, autoFocus }: any) => (
+    <div className="mb-4 group">
+        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
+        <div className="relative">
+            <input 
+                type={type}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                autoFocus={autoFocus}
+                className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-gray-400 text-gray-900 text-sm transition-all duration-200"
+            />
+        </div>
+    </div>
+);
+
 export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
@@ -114,24 +130,6 @@ export const LoginPage = () => {
       setLoading(false);
     }
   };
-
-  // --- Components ---
-
-  const MinimalInput = ({ label, type = "text", value, onChange, placeholder, autoFocus }: any) => (
-    <div className="mb-4 group">
-        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">{label}</label>
-        <div className="relative">
-            <input 
-                type={type}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                autoFocus={autoFocus}
-                className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-gray-400 text-gray-900 text-sm transition-all duration-200"
-            />
-        </div>
-    </div>
-  );
 
   // --- Render Steps ---
 
