@@ -4,9 +4,7 @@ import { useStore } from '../contexts/StoreContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Product, SalesData, BuyerQuestion, ProductOption, ProductVariant, ProfileSection, SectionType, Discount, StoreSettings, Order, MarketingCampaign, CustomerReview, BrandIdentity } from '../types';
 import { Icons, Button, Input, Select, Card, Badge, SegmentedControl, TextArea, Tabs, Toggle } from '../components/UI';
-import { generateProductDetails, analyzeSalesData, generateBrandStrategy, generateDuelScenario, DuelScenario, chatWithBrandPersona, generateSocialPost, SocialPostContent } from '../services/geminiService';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
-import { GoogleGenAI } from "@google/genai";
 import { useNavigate } from 'react-router-dom';
 
 // ... (Keep BentoStat) ...
@@ -39,434 +37,11 @@ const BentoStat = ({ label, value, change, color, icon: Icon, subtext }: any) =>
     </div>
 )};
 
-// --- New Component: Brand Persona Simulator ---
-const BrandPersonaSimulator = ({ identity, storeName }: { identity: BrandIdentity, storeName: string }) => {
-    const [messages, setMessages] = useState<{role: 'user' | 'brand', text: string}[]>([
-        { role: 'brand', text: `Hello! I am the soul of ${storeName}. What would you like to ask me?` }
-    ]);
-    const [input, setInput] = useState('');
-    const [loading, setLoading] = useState(false);
-    const scrollRef = useRef<HTMLDivElement>(null);
 
-    const handleSend = async () => {
-        if (!input.trim()) return;
-        const newMsgs = [...messages, { role: 'user' as const, text: input }];
-        setMessages(newMsgs);
-        setInput('');
-        setLoading(true);
 
-        const response = await chatWithBrandPersona(input, newMsgs, identity, storeName);
-        setMessages([...newMsgs, { role: 'brand', text: response }]);
-        setLoading(false);
-    };
 
-    useEffect(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }, [messages]);
 
-    return (
-        <Card className="h-[500px] flex flex-col bg-gray-50 border-gray-200 overflow-hidden relative">
-            <div className="absolute inset-0 bg-[radial-gradient(#cbd5e1_1px,transparent_1px)] [background-size:20px_20px] opacity-30 pointer-events-none"></div>
-            
-            <div className="p-4 border-b border-gray-200 bg-white z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-shop-primary to-blue-500 p-0.5">
-                    <div className="w-full h-full bg-white rounded-full flex items-center justify-center overflow-hidden">
-                        {identity.logoUrl ? <img src={identity.logoUrl} className="w-full h-full object-cover"/> : <span className="font-bold text-shop-primary">{storeName.charAt(0)}</span>}
-                    </div>
-                </div>
-                <div>
-                    <h3 className="font-bold text-sm text-gray-900">Brand Persona</h3>
-                    <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                        <p className="text-xs text-gray-500 capitalize">{identity.toneOfVoice || 'Neutral'} Tone</p>
-                    </div>
-                </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 z-10" ref={scrollRef}>
-                {messages.map((m, i) => (
-                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] rounded-2xl p-3 text-sm shadow-sm ${m.role === 'user' ? 'bg-black text-white rounded-tr-none' : 'bg-white text-gray-800 rounded-tl-none border border-gray-100'}`}>
-                            {m.text}
-                        </div>
-                    </div>
-                ))}
-                {loading && (
-                    <div className="flex justify-start">
-                        <div className="bg-white rounded-2xl rounded-tl-none p-3 border border-gray-100 shadow-sm flex gap-1">
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></span>
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-100"></span>
-                            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-200"></span>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <div className="p-3 bg-white border-t border-gray-200 z-10">
-                <div className="flex gap-2">
-                    <Input 
-                        value={input} 
-                        onChange={e => setInput(e.target.value)} 
-                        onKeyDown={e => e.key === 'Enter' && handleSend()}
-                        placeholder="Test your brand voice..." 
-                        className="bg-gray-50 border-transparent focus:bg-white"
-                    />
-                    <Button onClick={handleSend} variant="black" className="px-4"><Icons.ArrowRight className="w-4 h-4"/></Button>
-                </div>
-            </div>
-        </Card>
-    );
-};
-
-// --- New Component: Content Studio ---
-const ContentStudio = ({ products, identity }: { products: Product[], identity: BrandIdentity }) => {
-    const [selectedProduct, setSelectedProduct] = useState<string>("");
-    const [platform, setPlatform] = useState("Instagram");
-    const [generatedContent, setGeneratedContent] = useState<SocialPostContent | null>(null);
-    const [loading, setLoading] = useState(false);
-
-    const handleGenerate = async () => {
-        const prod = products.find(p => p.id === selectedProduct);
-        if (!prod) return;
-        setLoading(true);
-        const result = await generateSocialPost(prod, platform, identity);
-        setGeneratedContent(result);
-        setLoading(false);
-    };
-
-    const product = products.find(p => p.id === selectedProduct);
-
-    return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
-            {/* Controls */}
-            <div className="space-y-6">
-                <Card>
-                    <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-                        <Icons.Sparkles className="w-5 h-5 text-purple-500" /> Content Studio
-                    </h3>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Select Product</label>
-                            <Select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)}>
-                                <option value="">-- Choose Item --</option>
-                                {products.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
-                            </Select>
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Target Platform</label>
-                            <div className="flex gap-2">
-                                {['Instagram', 'TikTok', 'LinkedIn', 'Twitter'].map(p => (
-                                    <button 
-                                        key={p}
-                                        onClick={() => setPlatform(p)}
-                                        className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${platform === p ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}
-                                    >
-                                        {p}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <Button onClick={handleGenerate} disabled={!selectedProduct || loading} variant="primary" className="w-full h-12 shadow-lg">
-                            {loading ? 'Designing Post...' : 'Generate Magic'}
-                        </Button>
-                    </div>
-                </Card>
-
-                {generatedContent && (
-                    <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-100">
-                        <h4 className="font-bold text-indigo-900 mb-3 text-sm uppercase tracking-wider">AI Strategy</h4>
-                        <div className="space-y-3 text-sm">
-                            <div className="flex justify-between items-center p-2 bg-white/60 rounded-lg">
-                                <span className="text-gray-500">Est. Reach</span>
-                                <span className="font-bold text-gray-900">{generatedContent.estimatedReach}</span>
-                            </div>
-                            <div className="flex justify-between items-center p-2 bg-white/60 rounded-lg">
-                                <span className="text-gray-500">Best Time</span>
-                                <span className="font-bold text-gray-900">{generatedContent.bestTime}</span>
-                            </div>
-                            <div className="p-3 bg-white/60 rounded-lg">
-                                <span className="text-gray-500 block mb-1 text-xs uppercase font-bold">Visual Guide</span>
-                                <p className="text-gray-800 italic">{generatedContent.visualDescription}</p>
-                            </div>
-                        </div>
-                    </Card>
-                )}
-            </div>
-
-            {/* Preview (Mockup) */}
-            <div className="flex justify-center items-center bg-gray-100 rounded-3xl border border-gray-200 p-8 shadow-inner">
-                {product ? (
-                    <div className="w-[320px] bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden relative transform transition-all hover:scale-[1.02]">
-                        {/* Mockup Header */}
-                        <div className="h-14 flex items-center px-4 border-b border-gray-50">
-                            <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden">
-                                {identity.logoUrl ? <img src={identity.logoUrl} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-shop-primary"></div>}
-                            </div>
-                            <span className="ml-2 font-bold text-sm text-gray-900">MyBrand</span>
-                            <Icons.MoreHorizontal className="ml-auto w-4 h-4 text-gray-400" />
-                        </div>
-                        
-                        {/* Mockup Image Area */}
-                        <div className="aspect-[4/5] bg-gray-100 relative group overflow-hidden">
-                            <img src={product.image} className="w-full h-full object-cover" />
-                            {!generatedContent && !loading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-                                    <p className="text-white font-bold text-sm drop-shadow-md">Preview Area</p>
-                                </div>
-                            )}
-                            {loading && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm">
-                                    <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Mockup Actions */}
-                        <div className="p-3 flex justify-between items-center">
-                            <div className="flex gap-3 text-gray-800">
-                                <span className="hover:text-red-500 cursor-pointer"><Icons.Activity className="w-6 h-6 rotate-[-90deg]" /></span> {/* Heartish */}
-                                <Icons.MessageSquare className="w-6 h-6" />
-                                <Icons.Share className="w-6 h-6" />
-                            </div>
-                            <Icons.Flag className="w-5 h-5 text-gray-400" />
-                        </div>
-
-                        {/* Mockup Caption */}
-                        <div className="px-4 pb-6">
-                            <p className="text-sm text-gray-900 leading-snug">
-                                <span className="font-bold mr-1">MyBrand</span>
-                                {generatedContent ? generatedContent.caption : "Your AI generated caption will appear here..."}
-                            </p>
-                            <p className="text-blue-600 text-xs mt-1 font-medium">
-                                {generatedContent ? generatedContent.hashtags.map(t => `${t} `) : "#brand #product"}
-                            </p>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="text-center text-gray-400">
-                        <Icons.Layout className="w-12 h-12 mx-auto mb-2 opacity-20" />
-                        <p className="text-sm font-medium">Select a product to preview</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-const GrowthArena = () => {
-    const { marketingStats, updateMarketingStats, notify, settings } = useStore();
-    const [gameState, setGameState] = useState<'start' | 'loading' | 'betting' | 'result'>('start');
-    const [scenario, setScenario] = useState<DuelScenario | null>(null);
-    const [wager, setWager] = useState(50);
-    const [selectedOption, setSelectedOption] = useState<'A' | 'B' | null>(null);
-
-    const handleStartGame = async () => {
-        if (marketingStats.adCredits < 10) {
-            notify("Insufficient Ad Credits. Wait for daily reset.", "error");
-            return;
-        }
-        setGameState('loading');
-        const scn = await generateDuelScenario(settings.category);
-        if (scn) {
-            setScenario(scn);
-            setGameState('betting');
-            setSelectedOption(null);
-            setWager(Math.min(50, marketingStats.adCredits));
-        } else {
-            notify("Failed to generate scenario. Try again.", "error");
-            setGameState('start');
-        }
-    };
-
-    const handlePlaceBet = () => {
-        if (!selectedOption || !scenario) return;
-        setGameState('result');
-        
-        const isWin = selectedOption === scenario.winner;
-        const earnings = isWin ? Math.floor(wager * scenario.odds) : 0;
-        
-        const newStats = {
-            adCredits: isWin ? marketingStats.adCredits + earnings : marketingStats.adCredits - wager,
-            wins: isWin ? marketingStats.wins + 1 : marketingStats.wins,
-            losses: isWin ? marketingStats.losses : marketingStats.losses + 1,
-            streak: isWin ? marketingStats.streak + 1 : 0,
-            totalEarnings: isWin ? marketingStats.totalEarnings + earnings : marketingStats.totalEarnings
-        };
-        
-        updateMarketingStats(newStats);
-        
-        if (isWin) {
-            notify(`You won ${earnings} Credits!`, 'success');
-        } else {
-            notify(`Lost ${wager} Credits. Better luck next time!`, 'error');
-        }
-    };
-
-    return (
-        <div className="space-y-6 animate-fade-in pb-20">
-            {/* Header Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="bg-gray-900 text-white border-none relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-20 bg-blue-500 rounded-full blur-[80px] opacity-20"></div>
-                    <div className="relative z-10">
-                         <div className="flex items-center gap-2 mb-1 text-gray-400 text-xs font-bold uppercase tracking-wider">
-                            <Icons.Coins className="w-4 h-4 text-yellow-400" /> Ad Capital
-                         </div>
-                         <div className="text-3xl font-bold font-mono">{marketingStats.adCredits.toLocaleString()}</div>
-                    </div>
-                </Card>
-                <Card>
-                    <div className="text-xs text-gray-500 font-bold uppercase mb-1">Rank</div>
-                    <div className="text-2xl font-bold text-gray-900">{marketingStats.title} <span className="text-sm font-normal text-gray-400">Lvl {marketingStats.level}</span></div>
-                </Card>
-                <Card>
-                    <div className="text-xs text-gray-500 font-bold uppercase mb-1">Win Rate</div>
-                    <div className="text-2xl font-bold text-gray-900">
-                        {marketingStats.wins + marketingStats.losses > 0 
-                            ? Math.round((marketingStats.wins / (marketingStats.wins + marketingStats.losses)) * 100) 
-                            : 0}%
-                    </div>
-                </Card>
-                <Card>
-                    <div className="text-xs text-gray-500 font-bold uppercase mb-1">Streak</div>
-                    <div className="text-2xl font-bold text-orange-500 flex items-center gap-2">
-                        {marketingStats.streak} <Icons.TrendingUp className="w-5 h-5" />
-                    </div>
-                </Card>
-            </div>
-
-            {/* Main Arena */}
-            <div className="min-h-[500px] flex flex-col">
-                {gameState === 'start' && (
-                    <div className="flex-1 bg-white rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center justify-center text-center p-12 relative overflow-hidden">
-                        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-50"></div>
-                        <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6 shadow-inner relative z-10">
-                            <Icons.Swords className="w-10 h-10 text-gray-400" />
-                        </div>
-                        <h2 className="text-3xl font-bold mb-3 relative z-10">The Growth Arena</h2>
-                        <p className="text-gray-500 max-w-md mb-8 relative z-10">
-                            Test your marketing intuition against the AI. Predict which ad copy will convert better and win Ad Credits to level up your rank.
-                        </p>
-                        <Button onClick={handleStartGame} variant="black" className="px-10 py-4 text-lg relative z-10 shadow-xl">
-                            Enter Arena
-                        </Button>
-                    </div>
-                )}
-
-                {gameState === 'loading' && (
-                    <div className="flex-1 bg-white rounded-3xl border border-gray-100 flex flex-col items-center justify-center p-12">
-                        <div className="w-16 h-16 border-4 border-gray-200 border-t-black rounded-full animate-spin mb-6"></div>
-                        <p className="font-bold text-gray-600">Generating Scenario...</p>
-                        <p className="text-xs text-gray-400 mt-2">Analyzing market trends</p>
-                    </div>
-                )}
-
-                {(gameState === 'betting' || gameState === 'result') && scenario && (
-                    <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Context Panel */}
-                        <div className="bg-white rounded-3xl border border-gray-100 p-8 shadow-sm flex flex-col">
-                            <div className="flex items-center gap-2 mb-6">
-                                <Badge color="purple">Scenario</Badge>
-                                <span className="text-xs font-bold text-gray-400 uppercase">Payout: {scenario.odds}x</span>
-                            </div>
-                            
-                            <h2 className="text-2xl font-bold mb-2">{scenario.productName}</h2>
-                            <p className="text-gray-600 mb-8 leading-relaxed">{scenario.productContext}</p>
-                            
-                            <div className="mt-auto bg-gray-50 rounded-2xl p-6 border border-gray-100">
-                                <label className="text-xs font-bold text-gray-500 uppercase block mb-3">Your Wager</label>
-                                <div className="flex items-center gap-4">
-                                    <input 
-                                        type="range" 
-                                        min="10" 
-                                        max={marketingStats.adCredits} 
-                                        step="10" 
-                                        value={wager}
-                                        onChange={(e) => setWager(parseInt(e.target.value))}
-                                        disabled={gameState === 'result'}
-                                        className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black"
-                                    />
-                                    <div className="text-xl font-bold font-mono w-20 text-right">{wager}</div>
-                                </div>
-                                <div className="flex justify-between mt-2 text-xs text-gray-400">
-                                    <span>Min: 10</span>
-                                    <span>Max: {marketingStats.adCredits}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Options Panel */}
-                        <div className="space-y-4">
-                             {/* Option A */}
-                             <button
-                                disabled={gameState === 'result'}
-                                onClick={() => setSelectedOption('A')}
-                                className={`w-full text-left p-6 rounded-2xl border-2 transition-all relative overflow-hidden group ${
-                                    gameState === 'result' 
-                                        ? (scenario.winner === 'A' ? 'border-green-500 bg-green-50' : (selectedOption === 'A' ? 'border-red-200 bg-red-50' : 'border-gray-100 opacity-50'))
-                                        : (selectedOption === 'A' ? 'border-black bg-gray-50 shadow-md scale-[1.02]' : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-sm')
-                                }`}
-                             >
-                                <div className="flex justify-between mb-2">
-                                    <span className="font-bold text-xs uppercase tracking-wider opacity-50">Option A</span>
-                                    {gameState === 'result' && scenario.winner === 'A' && <Icons.Check className="w-5 h-5 text-green-600" />}
-                                </div>
-                                <p className="text-lg font-medium">{scenario.optionA}</p>
-                             </button>
-
-                             {/* VS Badge */}
-                             <div className="flex items-center justify-center">
-                                 <div className="bg-gray-200 text-gray-500 text-[10px] font-bold px-2 py-1 rounded-full">VS</div>
-                             </div>
-
-                             {/* Option B */}
-                             <button
-                                disabled={gameState === 'result'}
-                                onClick={() => setSelectedOption('B')}
-                                className={`w-full text-left p-6 rounded-2xl border-2 transition-all relative overflow-hidden group ${
-                                    gameState === 'result' 
-                                        ? (scenario.winner === 'B' ? 'border-green-500 bg-green-50' : (selectedOption === 'B' ? 'border-red-200 bg-red-50' : 'border-gray-100 opacity-50'))
-                                        : (selectedOption === 'B' ? 'border-black bg-gray-50 shadow-md scale-[1.02]' : 'border-gray-100 bg-white hover:border-gray-300 hover:shadow-sm')
-                                }`}
-                             >
-                                <div className="flex justify-between mb-2">
-                                    <span className="font-bold text-xs uppercase tracking-wider opacity-50">Option B</span>
-                                    {gameState === 'result' && scenario.winner === 'B' && <Icons.Check className="w-5 h-5 text-green-600" />}
-                                </div>
-                                <p className="text-lg font-medium">{scenario.optionB}</p>
-                             </button>
-
-                             {/* Action Area */}
-                             <div className="pt-4">
-                                 {gameState === 'betting' ? (
-                                     <Button 
-                                        onClick={handlePlaceBet} 
-                                        disabled={!selectedOption} 
-                                        className="w-full h-14 text-lg shadow-xl" 
-                                        variant="black"
-                                    >
-                                        Place Bet ({wager} Credits)
-                                     </Button>
-                                 ) : (
-                                     <div className="bg-gray-900 text-white p-6 rounded-2xl animate-slide-up">
-                                         <div className="flex items-start gap-4">
-                                             <div className="mt-1"><Icons.Lightbulb className="w-5 h-5 text-yellow-400" /></div>
-                                             <div>
-                                                 <h4 className="font-bold text-lg mb-1">Analysis</h4>
-                                                 <p className="text-gray-300 text-sm leading-relaxed">{scenario.reason}</p>
-                                             </div>
-                                         </div>
-                                         <Button onClick={handleStartGame} variant="secondary" className="w-full mt-6">Next Challenge</Button>
-                                     </div>
-                                 )}
-                             </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
 
 // ... (existing CampaignModal, ProductForm, FulfillmentModal, Editors code) ...
 const CampaignModal = ({ onClose }: { onClose: () => void }) => {
@@ -534,7 +109,6 @@ const CampaignModal = ({ onClose }: { onClose: () => void }) => {
 const ProductForm = ({ onClose, initialData }: { onClose: () => void, initialData?: Product | null }) => {
   // ... (same as before)
   const { addProduct, updateProduct, notify } = useStore();
-  const [loadingAI, setLoadingAI] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
   const [formData, setFormData] = useState<Partial<Product>>(initialData || {
     title: '', description: '', price: 0, compareAtPrice: 0, costPerItem: 0, category: 'General', 
@@ -545,16 +119,6 @@ const ProductForm = ({ onClose, initialData }: { onClose: () => void, initialDat
   // Calculate profit margins
   const profit = (formData.price || 0) - (formData.costPerItem || 0);
   const margin = formData.price ? ((profit / formData.price) * 100).toFixed(1) : 0;
-
-  const handleGenerate = async () => {
-    if (!formData.title || !formData.category) return;
-    setLoadingAI(true);
-    const suggestion = await generateProductDetails(formData.title, formData.category);
-    setLoadingAI(false);
-    if (suggestion) {
-      setFormData(prev => ({ ...prev, description: suggestion.description, price: suggestion.price }));
-    }
-  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -623,9 +187,6 @@ const ProductForm = ({ onClose, initialData }: { onClose: () => void, initialDat
                             <div>
                                 <div className="flex justify-between items-center mb-1.5">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Description</label>
-                                    <button type="button" onClick={handleGenerate} disabled={loadingAI} className="text-xs text-blue-600 font-bold flex items-center gap-1 hover:underline">
-                                        <Icons.Sparkles className="w-3 h-3" /> {loadingAI ? 'Generating...' : 'Generate with AI'}
-                                    </button>
                                 </div>
                                 <TextArea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="min-h-[150px] font-medium text-gray-600" />
                             </div>
@@ -1592,21 +1153,11 @@ export const AdminPage = () => {
     const [fulfillmentOrder, setFulfillmentOrder] = useState<Order | null>(null);
     const [replyingTo, setReplyingTo] = useState<string | null>(null);
     const [replyText, setReplyText] = useState("");
-    const [isGeneratingStrategy, setIsGeneratingStrategy] = useState(false);
     const [isBrandEditing, setIsBrandEditing] = useState(false);
 
     const activeStore = stores.find(s => s.id === activeStoreId);
 
     if (!activeStore) return <div className="p-10">Loading Store...</div>;
-
-    const handleGenerateStrategy = async () => {
-        setIsGeneratingStrategy(true);
-        const strategy = await generateBrandStrategy(settings.name, settings.category);
-        if (strategy) {
-            updateBrandIdentity(strategy);
-        }
-        setIsGeneratingStrategy(false);
-    };
 
     const handleReplySubmit = (reviewId: string) => {
         if (!replyText) return;
@@ -1635,8 +1186,6 @@ export const AdminPage = () => {
         switch(activeTab) {
             case 'builder':
                 return <BuilderPage />;
-            case 'arena':
-                return <GrowthArena />;
             case 'products':
                 // ... (Products tab unchanged)
                 return (
@@ -1665,9 +1214,6 @@ export const AdminPage = () => {
             case 'marketing':
                 return (
                     <div className="space-y-8 animate-fade-in">
-                        {/* New Content Studio replaces the basic Generator */}
-                        <ContentStudio products={products} identity={brandIdentity} />
-                        
                         <Card>
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-lg font-bold flex items-center gap-2">
@@ -1718,9 +1264,6 @@ export const AdminPage = () => {
                                 <Card>
                                     <div className="flex justify-between items-center mb-6">
                                         <h3 className="text-lg font-bold">Brand DNA</h3>
-                                        <Button onClick={handleGenerateStrategy} disabled={isGeneratingStrategy} variant="secondary" className="text-xs">
-                                            {isGeneratingStrategy ? 'Analyzing...' : 'Generate with AI'}
-                                        </Button>
                                     </div>
                                     <div className="space-y-6">
                                         {/* ... (Color/Typo controls same as previous file) ... */}
@@ -1785,9 +1328,6 @@ export const AdminPage = () => {
                                     </Button>
                                 </div>
                                 <Brand3DCard identity={brandIdentity} name={settings.name} category={settings.category} />
-                                
-                                {/* New Brand Chat */}
-                                <BrandPersonaSimulator identity={brandIdentity} storeName={settings.name} />
                             </div>
 
                             {/* Right Column: Mood Board & Stats */}
@@ -1933,7 +1473,6 @@ export const AdminPage = () => {
 
     const navItems = [
         { id: 'dashboard', label: 'Dashboard', icon: Icons.Home },
-        { id: 'arena', label: 'Growth Arena', icon: Icons.Swords },
         { id: 'brand', label: 'Brand & Identity', icon: Icons.Palette },
         { id: 'marketing', label: 'Marketing', icon: Icons.Megaphone }, // Moved up
         { id: 'products', label: 'Products', icon: Icons.Tag },
